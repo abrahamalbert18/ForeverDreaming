@@ -1,0 +1,4 @@
+# packages in environment at /Users/abrahamalbert/anaconda3/envs/TextAI:
+#
+# Name                    Version                   Build  Channel
+pytorch                   2.1.2                  py3.11_0    pytorch
