@@ -38,9 +38,7 @@ def extractBatch(dataset, batchSize, item, maxSequenceLength, phase):
     :return: source, target (source shifted by 1 token)
     """
     data = dataset[item]
-    if phase == "train":
-        data = dataset[item]
-    iterations = math.ceil(data.size(0) / batchSize)
+    iterations = max(2, math.ceil(data.size(0) / batchSize))
     source = data[:, :maxSequenceLength - 1]  # Inputs
     target = data[:, 1:]  # Labels
     for i in range(iterations-1):
@@ -62,12 +60,16 @@ modelConfig = {"contextLength": contextLength,
                "maxSequenceLength": maxSequenceLength,
                "batchSize": batchSize}
 cuda = torch.cuda.is_available()
+device = torch.device("mps") # for mac
+if cuda:
+    device = torch.device("cuda:0") # for NVIDIA GPUs
 
 model = ScriptWriter(contextLength=contextLength,
                          numberOfHeads=numberOfHeads,
                          vocabSize=vocabSize,
                          generate=False,
                          depth=depth)
+model.to(device)
 
 # optimizer
 softmax = nn.Softmax()
@@ -76,26 +78,20 @@ optimizer = AdamW(model.parameters(), lr=learningRate)
 # learning rate scheduler
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.1)
 
-device = torch.device("mps") # for mac
-if cuda:
-    device = torch.device("cuda:0") # for NVIDIA GPUs
-
 # best metrics and parameters
 bestEpoch = 0
 bestEpochLoss = 15
 
-modelName = f"ScriptWriter-->v1.pth.tar"
+modelName = f"Transformer-->ScriptWriter-->v1.pth.tar"
 # Load from checkpoint
 if os.path.exists(f"SavedModels/{modelName}"):
-    checkpoint = torch.load(f"SavedModels/Encoder-->{modelName}",
+    checkpoint = torch.load(f"SavedModels/{modelName}",
                             map_location=device)
     model.load_state_dict(checkpoint["modelStateDict"])
     bestEpochLoss = checkpoint["bestEpochLoss"]
     learningRate = checkpoint["learningRate"]
-    # optimizer.load_state_dict(checkpoint["optimizerStateDict"])
+    optimizer.load_state_dict(checkpoint["optimizerStateDict"])
     del checkpoint
-
-model.to(device)
 
 writer = SummaryWriter(f"runs/{modelName}")
 
@@ -118,7 +114,9 @@ def start(bestEpoch, bestEpochLoss, modelConfig):
             epochLoss = 0
             iterations = 0
             # Loop 1 --> Iterate over all numberOfEpisodes
-            for item in range(lengthOfDatasets[phase]):
+            for item in tqdm(range(lengthOfDatasets[phase]), desc="Episode "
+                                                                  "Progress",
+                            unit="Episode(s)", leave=False):
                 dataloader = extractBatch(dataset=dataset,batchSize=batchSize,
                                           item=item,
                                           maxSequenceLength=maxSequenceLength,
@@ -126,13 +124,16 @@ def start(bestEpoch, bestEpochLoss, modelConfig):
                 iterationLoss = 0
                 # Loop 2 --> Iterate within episode transcription
                 for source, target in tqdm(iter(dataloader),
-                                           desc="Iteration Progress",
-                                           leave=False):
-
+                                           desc="MiniBatch Progress",
+                                           leave=False,
+                                           unit="MiniBatch"):
+                    if source.size(0) == 0:
+                        break
                     with torch.set_grad_enabled(phase == "train"):
                         source, target = source.to(device), target.to(device)
                         outputs, loss = model(source, target)
-
+                        iterationLoss += loss.item()
+                        iterations += 1
                         if phase == "train":
                             # Zero the gradients
                             optimizer.zero_grad()
@@ -141,8 +142,6 @@ def start(bestEpoch, bestEpochLoss, modelConfig):
                             # update the weights
                             optimizer.step()
 
-                    iterationLoss += loss.item()
-                    iterations += 1
                 epochLoss += (iterationLoss / iterations)
             """
              Epoch metrics
@@ -160,11 +159,11 @@ def start(bestEpoch, bestEpochLoss, modelConfig):
                     os.mkdir("SavedModels")
                 torch.save({"epoch":          epoch + 1,
                             "modelStateDict": model.state_dict(),
-                            # "optimizerStateDict":optimizer.state_dict(),
+                            "optimizerStateDict":optimizer.state_dict(),
                             "bestEpochLoss":  round(bestEpochLoss, 4),
                             "learningRate":   learningRate,
                             "modelConfig": modelConfig},
-                           f"SavedModels/Encoder-->{modelName}")
+                           f"SavedModels/{modelName}")
             writer.close()
     print(f"Best loss: {round(bestEpochLoss, 4)} @ epoch #{bestEpoch + 1}")
     print(f"Best model saved.")
@@ -177,7 +176,7 @@ if __name__ == '__main__':
     vocabSize = 30000
     depth = 8
     learningRate = 1e-3
-    batchSize = 10
+    batchSize = 15
     maxSequenceLength = 100
     modelConfig = {"contextLength":     contextLength,
                    "numberOfHeads":     numberOfHeads,
@@ -185,7 +184,8 @@ if __name__ == '__main__':
                    "depth":             depth,
                    "maxSequenceLength": maxSequenceLength,
                    "batchSize":         batchSize}
-    start(0,0, modelConfig)
+    print(f"Previous models best loss: {bestEpochLoss}")
+    start(0,bestEpochLoss, modelConfig)
     # dataloader = extractBatch(5, 0,10, "train")
     # for s, t in iter(dataloader):
     #     print(s, t)

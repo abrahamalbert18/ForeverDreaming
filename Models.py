@@ -19,18 +19,18 @@ class ScriptWriter(nn.Module):
                                                  d_model=self.contextLength,
                                                  num_encoder_layers=self.depth,
                                                  num_decoder_layers=self.depth)
-        self.encoderLayer = nn.TransformerEncoderLayer(d_model=self.contextLength,
-                                                        nhead=self.numberOfHeads,
-                                                       batch_first=True,
-                                                       dropout=self.dropout)
-        self.decoderLayer = nn.TransformerDecoderLayer(d_model=self.contextLength,
-                                                        nhead=self.numberOfHeads,
-                                                       batch_first=True,
-                                                       dropout=self.dropout)
-        self.encoderNetwork = nn.TransformerEncoder(encoder_layer=self.encoderLayer,
-                                                    num_layers=self.depth)
-        self.decoderNetwork = nn.TransformerDecoder(decoder_layer=self.decoderLayer,
-                                                    num_layers=self.depth)
+        # self.encoderLayer = nn.TransformerEncoderLayer(d_model=self.contextLength,
+        #                                                 nhead=self.numberOfHeads,
+        #                                                batch_first=True,
+        #                                                dropout=self.dropout)
+        # self.decoderLayer = nn.TransformerDecoderLayer(d_model=self.contextLength,
+        #                                                 nhead=self.numberOfHeads,
+        #                                                batch_first=True,
+        #                                                dropout=self.dropout)
+        # self.encoderNetwork = nn.TransformerEncoder(encoder_layer=self.encoderLayer,
+        #                                             num_layers=self.depth)
+        # self.decoderNetwork = nn.TransformerDecoder(decoder_layer=self.decoderLayer,
+        #                                             num_layers=self.depth)
 
         self.criterion = nn.CrossEntropyLoss(ignore_index=3,
                                                  reduction="mean")
@@ -46,8 +46,8 @@ class ScriptWriter(nn.Module):
         source = self.positionEmbedding(source)
         target = self.layerNorm(self.wordEmbedding(decoderInputs.long()))
         target = self.positionEmbedding(target)
-        # outputs = self.transformerNetwork(src=source, tgt=target)
-        outputs = self.encoderNetwork(src=source)
+        outputs = self.transformerNetwork(src=source, tgt=target)
+        # outputs = self.encoderNetwork(src=source)
         # outputs = self.decoderNetwork(tgt=source, memory=target)
         # outputs = self.layerNorm(outputs)
         outputs = self.predictionLayer(outputs) # B, T, VocabSize
@@ -59,7 +59,7 @@ class ScriptWriter(nn.Module):
         return outputs, loss
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, contextLength, maxSequenceLength=100,
+    def __init__(self, contextLength, maxSequenceLength=500,
                  dropout=0.1):
         super().__init__()
         # self.dropout = nn.Dropout(p=dropout)
