@@ -16,7 +16,7 @@ torch.manual_seed(42)
 
 maxSequenceLength = 100
 batchSize = 10
-numberOfEpochs = 10
+numberOfEpochs = 1
 
 tokenizer = Tokenizer.from_file(path="Tokenizer/ForeverDreaming/Vocab.json")
 trainingDataset = ForeverDreamingDataset(splitType="train",
@@ -53,12 +53,6 @@ vocabSize = 30000
 depth = 8
 learningRate = 1e-3
 
-modelConfig = {"contextLength": contextLength,
-               "numberOfHeads": numberOfHeads,
-               "vocabSize": vocabSize,
-               "depth": depth,
-               "maxSequenceLength": maxSequenceLength,
-               "batchSize": batchSize}
 cuda = torch.cuda.is_available()
 device = torch.device("mps") # for mac
 if cuda:
@@ -81,6 +75,22 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.1)
 # best metrics and parameters
 bestEpoch = 0
 bestEpochLoss = 15
+# Model Config
+contextLength = 512
+numberOfHeads = 8
+vocabSize = 30000
+depth = 8
+learningRate = 1e-3
+batchSize = 15
+maxSequenceLength = 100
+modelConfig = {"contextLength":     contextLength,
+               "numberOfHeads":     numberOfHeads,
+               "vocabSize":         vocabSize,
+               "depth":             depth,
+               "maxSequenceLength": maxSequenceLength,
+               "batchSize":         batchSize}
+
+
 
 modelName = f"Transformer-->ScriptWriter-->v1.pth.tar"
 # Load from checkpoint
@@ -91,104 +101,106 @@ if os.path.exists(f"SavedModels/{modelName}"):
     bestEpochLoss = checkpoint["bestEpochLoss"]
     learningRate = checkpoint["learningRate"]
     optimizer.load_state_dict(checkpoint["optimizerStateDict"])
-    del checkpoint
+    modelConfig = checkpoint["modelConfig"]
+    print("Model and Optimizer loaded successfully")
+    # del checkpoint
+
+print(f"Previous model's best loss: {bestEpochLoss}")
+
 
 writer = SummaryWriter(f"runs/{modelName}")
 
-def start(bestEpoch, bestEpochLoss, modelConfig):
-    # training and evaluation loop
-    for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
-        print("-" * 40)
-        print(f"Epoch {epoch + 1}:")
-        # Setting phase
-        for phase in ["train", "val"]:
-            dataset = datasets[phase]
-            print("-" * 40)
-            print(f"Status : {phase}")
-            print("-" * 40)
-            if phase == "train":
-                model.train()
-            else:
-                model.eval()
+# training and evaluation loop
+for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
+    tqdm.write("-" * 40)
+    tqdm.write(f"Epoch {epoch + 1}:")
+    # Setting phase
+    for phase in ["train", "val"]:
+        dataset = datasets[phase]
+        tqdm.write(f"Status : {phase}")
+        tqdm.write("-" * 40)
+        if phase == "train":
+            model.train()
+        else:
+            model.eval()
 
-            epochLoss = 0
+        epochLoss = 0
+        # Loop 1 --> Iterate over all numberOfEpisodes
+        for item in tqdm(range(lengthOfDatasets[phase]), desc="Episode "
+                                                              "Progress",
+                        unit=" Episode(s)", leave=False):
+            dataloader = extractBatch(dataset=dataset,batchSize=batchSize,
+                                      item=item,
+                                      maxSequenceLength=maxSequenceLength,
+                                      phase=phase)
+            episodeLoss = 0
             iterations = 0
-            # Loop 1 --> Iterate over all numberOfEpisodes
-            for item in tqdm(range(lengthOfDatasets[phase]), desc="Episode "
-                                                                  "Progress",
-                            unit="Episode(s)", leave=False):
-                dataloader = extractBatch(dataset=dataset,batchSize=batchSize,
-                                          item=item,
-                                          maxSequenceLength=maxSequenceLength,
-                                          phase=phase)
-                iterationLoss = 0
-                # Loop 2 --> Iterate within episode transcription
-                for source, target in tqdm(iter(dataloader),
-                                           desc="MiniBatch Progress",
-                                           leave=False,
-                                           unit="MiniBatch"):
-                    if source.size(0) == 0:
-                        break
-                    with torch.set_grad_enabled(phase == "train"):
-                        source, target = source.to(device), target.to(device)
-                        outputs, loss = model(source, target)
-                        iterationLoss += loss.item()
-                        iterations += 1
-                        if phase == "train":
-                            # Zero the gradients
-                            optimizer.zero_grad()
-                            # backpropgate the loss
-                            loss.backward()
-                            # update the weights
-                            optimizer.step()
+            # Loop 2 --> Iterate within episode transcription
+            for source, target in tqdm(iter(dataloader),
+                                       desc="MiniBatch Progress",
+                                       leave=False,
+                                       unit=" MiniBatch(es)"):
+                if source.size(0) == 0:
+                    break
+                with torch.set_grad_enabled(phase == "train"):
+                    source, target = source.to(device), target.to(device)
+                    outputs, loss = model(source, target)
+                    episodeLoss += loss.item()
+                    iterations += 1
+                    if phase == "train":
+                        # Zero the gradients
+                        optimizer.zero_grad()
+                        # backpropgate the loss
+                        loss.backward()
+                        # update the weights
+                        optimizer.step()
 
-                epochLoss += (iterationLoss / iterations)
-            """
-             Epoch metrics
-            """
-            averageEpochLoss = epochLoss / (epoch + 1)
-            if epoch % 1 == 0:
-                print(f"{phase} loss = {averageEpochLoss:.4f}")
-            writer.add_scalar(f"{phase.capitalize()} Loss/Epoch",
-                              averageEpochLoss,
-                              epoch + 1)
-            if (averageEpochLoss < bestEpochLoss) and phase == "val":
-                bestEpochLoss = averageEpochLoss
-                bestEpoch = epoch
-                if not os.path.exists(f"SavedModels/"):
-                    os.mkdir("SavedModels")
-                torch.save({"epoch":          epoch + 1,
-                            "modelStateDict": model.state_dict(),
-                            "optimizerStateDict":optimizer.state_dict(),
-                            "bestEpochLoss":  round(bestEpochLoss, 4),
-                            "learningRate":   learningRate,
-                            "modelConfig": modelConfig},
-                           f"SavedModels/{modelName}")
-            writer.close()
-    print(f"Best loss: {round(bestEpochLoss, 4)} @ epoch #{bestEpoch + 1}")
-    print(f"Best model saved.")
-    pass
+            episodeLoss = episodeLoss / iterations
+            if item % 100 == 0:
+                tqdm.write(f"{item}th episode loss: {episodeLoss}")
+            epochLoss += episodeLoss
+        """
+         Epoch metrics
+        """
+        epochLoss = epochLoss / (lengthOfDatasets[phase])
+        if epoch % 1 == 0:
+            tqdm.write(f"{phase} loss = {epochLoss:.4f}")
+        writer.add_scalar(f"{phase.capitalize()} Loss/Epoch",
+                          epochLoss,
+                          epoch + 1)
+        if (epochLoss < bestEpochLoss) and phase == "val":
+            bestEpochLoss = epochLoss
+            bestEpoch = epoch
+            if not os.path.exists(f"SavedModels/"):
+                os.mkdir("SavedModels")
+            torch.save({"epoch":          epoch + 1,
+                        "modelStateDict": model.state_dict(),
+                        "optimizerStateDict":optimizer.state_dict(),
+                        "bestEpochLoss":  round(bestEpochLoss, 4),
+                        "learningRate":   learningRate,
+                        "modelConfig": modelConfig},
+                       f"SavedModels/{modelName}")
+            tqdm.write(f"Best loss: {round(bestEpochLoss, 4)} @ epoch "
+                  f"#{bestEpoch + 1}")
+            tqdm.write(f"Best model saved.")
 
-if __name__ == '__main__':
-    # Model Config
-    contextLength = 512
-    numberOfHeads = 8
-    vocabSize = 30000
-    depth = 8
-    learningRate = 1e-3
-    batchSize = 15
-    maxSequenceLength = 100
-    modelConfig = {"contextLength":     contextLength,
-                   "numberOfHeads":     numberOfHeads,
-                   "vocabSize":         vocabSize,
-                   "depth":             depth,
-                   "maxSequenceLength": maxSequenceLength,
-                   "batchSize":         batchSize}
-    print(f"Previous models best loss: {bestEpochLoss}")
-    start(0,bestEpochLoss, modelConfig)
-    # dataloader = extractBatch(5, 0,10, "train")
-    # for s, t in iter(dataloader):
-    #     print(s, t)
-    #     if s.numel() == 0:
-    #         print(s)
+        writer.close()
+
+# if __name__ == '__main__':
+#     # Model Config
+#     contextLength = 512
+#     numberOfHeads = 8
+#     vocabSize = 30000
+#     depth = 8
+#     learningRate = 1e-3
+#     batchSize = 15
+#     maxSequenceLength = 100
+#     modelConfig = {"contextLength":     contextLength,
+#                    "numberOfHeads":     numberOfHeads,
+#                    "vocabSize":         vocabSize,
+#                    "depth":             depth,
+#                    "maxSequenceLength": maxSequenceLength,
+#                    "batchSize":         batchSize}
+#     print(f"Previous models best loss: {bestEpochLoss}")
+#     start(0,bestEpochLoss, modelConfig)
 

@@ -42,6 +42,8 @@ class ScriptWriter(nn.Module):
                                 self.vocabSize)
 
     def forward(self, encoderInputs, decoderInputs):
+        if not self.training:
+            self.dropout = 0
         source = self.layerNorm(self.wordEmbedding(encoderInputs.long()))
         source = self.positionEmbedding(source)
         target = self.layerNorm(self.wordEmbedding(decoderInputs.long()))
@@ -55,7 +57,7 @@ class ScriptWriter(nn.Module):
         if self.generate:
             return outputs
 
-        loss = self.criterion(outputs, decoderInputs.long().view(-1))
+        loss = self.criterion(outputs, decoderInputs.long().reshape(-1))
         return outputs, loss
 
 class PositionalEncoding(nn.Module):
