@@ -15,8 +15,8 @@ import os
 torch.manual_seed(42)
 
 maxSequenceLength = 100
-batchSize = 10
-numberOfEpochs = 1
+#batchSize = 10
+numberOfEpochs = 150
 
 tokenizer = Tokenizer.from_file(path="Tokenizer/ForeverDreaming/Vocab.json")
 trainingDataset = ForeverDreamingDataset(splitType="train",
@@ -47,28 +47,29 @@ def extractBatch(dataset, batchSize, item, maxSequenceLength, phase):
     pass
 
 # Model Config
-contextLength = 512
+contextLength = 768
 numberOfHeads = 8
 vocabSize = 30000
-depth = 8
-learningRate = 1e-3
+depth = 4
+learningRate = 1e-2
 
 cuda = torch.cuda.is_available()
 device = torch.device("mps") # for mac
 if cuda:
-    device = torch.device("cuda:0") # for NVIDIA GPUs
+    device = torch.device("cuda") # for NVIDIA GPUs
 
 model = ScriptWriter(contextLength=contextLength,
                          numberOfHeads=numberOfHeads,
                          vocabSize=vocabSize,
                          generate=False,
                          depth=depth)
-model.to(device)
+#model = torch.nn.DataParallel(model, device_ids=[0,1])
+#model.to(device)
 
 # optimizer
 softmax = nn.Softmax()
-optimizer = AdamW(model.parameters(), lr=learningRate)
-# optimizer = torch.optim.SGD(model.parameters(), lr=learningRate)
+#optimizer = AdamW(model.parameters(), lr=learningRate)
+optimizer = torch.optim.SGD(model.parameters(), lr=learningRate)
 # learning rate scheduler
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.1)
 
@@ -76,12 +77,7 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.1)
 bestEpoch = 0
 bestEpochLoss = 15
 # Model Config
-contextLength = 512
-numberOfHeads = 8
-vocabSize = 30000
-depth = 8
-learningRate = 1e-3
-batchSize = 15
+batchSize = 20
 maxSequenceLength = 100
 modelConfig = {"contextLength":     contextLength,
                "numberOfHeads":     numberOfHeads,
@@ -93,6 +89,7 @@ modelConfig = {"contextLength":     contextLength,
 
 
 modelName = f"Transformer-->ScriptWriter-->v1.pth.tar"
+#modelName = "mini.pth.tar"
 # Load from checkpoint
 if os.path.exists(f"SavedModels/{modelName}"):
     checkpoint = torch.load(f"SavedModels/{modelName}",
@@ -106,7 +103,8 @@ if os.path.exists(f"SavedModels/{modelName}"):
     # del checkpoint
 
 print(f"Previous model's best loss: {bestEpochLoss}")
-
+model = torch.nn.DataParallel(model, device_ids=[0,1])
+model.to(device)
 
 writer = SummaryWriter(f"runs/{modelName}")
 
@@ -117,8 +115,8 @@ for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
     # Setting phase
     for phase in ["train", "val"]:
         dataset = datasets[phase]
-        tqdm.write(f"Status : {phase}")
-        tqdm.write("-" * 40)
+        #tqdm.write(f"Status : {phase}")
+        #tqdm.write("-" * 40)
         if phase == "train":
             model.train()
         else:
@@ -145,6 +143,7 @@ for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
                 with torch.set_grad_enabled(phase == "train"):
                     source, target = source.to(device), target.to(device)
                     outputs, loss = model(source, target)
+                    loss = loss.mean()
                     episodeLoss += loss.item()
                     iterations += 1
                     if phase == "train":
@@ -152,12 +151,14 @@ for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
                         optimizer.zero_grad()
                         # backpropgate the loss
                         loss.backward()
+                        # Clipping the gradients
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                         # update the weights
                         optimizer.step()
 
             episodeLoss = episodeLoss / iterations
-            if item % 100 == 0:
-                tqdm.write(f"{item}th episode loss: {episodeLoss}")
+            #if item % 100 == 0:
+            #    tqdm.write(f"{item}th episode loss: {episodeLoss}")
             epochLoss += episodeLoss
         """
          Epoch metrics
@@ -174,16 +175,18 @@ for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
             if not os.path.exists(f"SavedModels/"):
                 os.mkdir("SavedModels")
             torch.save({"epoch":          epoch + 1,
-                        "modelStateDict": model.state_dict(),
+                        "modelStateDict": model.module.state_dict(),
                         "optimizerStateDict":optimizer.state_dict(),
                         "bestEpochLoss":  round(bestEpochLoss, 4),
-                        "learningRate":   learningRate,
+                        "initialLearningRate":   learningRate,
+                        "latestLearningRate":scheduler.get_last_lr(),
                         "modelConfig": modelConfig},
                        f"SavedModels/{modelName}")
             tqdm.write(f"Best loss: {round(bestEpochLoss, 4)} @ epoch "
                   f"#{bestEpoch + 1}")
             tqdm.write(f"Best model saved.")
-
+        if (epoch % 15 == 0) and (epoch < 105):
+           scheduler.step()
         writer.close()
 
 # if __name__ == '__main__':

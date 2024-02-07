@@ -14,6 +14,7 @@ class ScriptWriter(nn.Module):
         self.dropout = dropout
         self.wordEmbedding = nn.Embedding(self.vocabSize, self.contextLength)
         self.positionEmbedding = PositionalEncoding(self.contextLength)
+        #self.positionEmbedding = nn.Embedding(self.vocabSize, self.contextLength)
         self.transformerNetwork = nn.Transformer(nhead=self.numberOfHeads,
                                                  batch_first=True,
                                                  d_model=self.contextLength,
@@ -42,13 +43,16 @@ class ScriptWriter(nn.Module):
                                 self.vocabSize)
 
     def forward(self, encoderInputs, decoderInputs):
-        if not self.training:
-            self.dropout = 0
-        source = self.layerNorm(self.wordEmbedding(encoderInputs.long()))
+        #if not self.training:
+        #    self.dropout = 0
+        source = self.wordEmbedding(encoderInputs.long())
         source = self.positionEmbedding(source)
-        target = self.layerNorm(self.wordEmbedding(decoderInputs.long()))
+        target = self.wordEmbedding(decoderInputs.long())
         target = self.positionEmbedding(target)
-        outputs = self.transformerNetwork(src=source, tgt=target)
+        sourceMask = nn.Transformer.generate_square_subsequent_mask(
+                     source.size(1), device=source.device)
+        sourceMask[sourceMask.isnan() == True] = 0.0
+        outputs = self.transformerNetwork(src=source, tgt=target, src_mask=sourceMask)
         # outputs = self.encoderNetwork(src=source)
         # outputs = self.decoderNetwork(tgt=source, memory=target)
         # outputs = self.layerNorm(outputs)
@@ -64,7 +68,7 @@ class PositionalEncoding(nn.Module):
     def __init__(self, contextLength, maxSequenceLength=500,
                  dropout=0.1):
         super().__init__()
-        # self.dropout = nn.Dropout(p=dropout)
+        #self.dropout = nn.Dropout(p=dropout)
 
         positionalEmbedding = torch.zeros(maxSequenceLength, contextLength)
         #PositionalEmbedding
