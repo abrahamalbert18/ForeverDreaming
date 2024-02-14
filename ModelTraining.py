@@ -16,7 +16,7 @@ torch.manual_seed(42)
 
 maxSequenceLength = 100
 #batchSize = 10
-numberOfEpochs = 150
+numberOfEpochs = 100
 
 tokenizer = Tokenizer.from_file(path="Tokenizer/ForeverDreaming/Vocab.json")
 trainingDataset = ForeverDreamingDataset(splitType="train",
@@ -88,7 +88,7 @@ modelConfig = {"contextLength":     contextLength,
 
 
 
-modelName = f"Transformer-->ScriptWriter-->v1.pth.tar"
+modelName = f"Encoder-->ScriptWriter-->v1.pth.tar"
 #modelName = "mini.pth.tar"
 # Load from checkpoint
 if os.path.exists(f"SavedModels/{modelName}"):

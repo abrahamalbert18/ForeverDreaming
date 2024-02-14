@@ -58,6 +58,8 @@ model = ScriptWriter(contextLength=contextLength,
 model.load_state_dict(checkpoint["modelStateDict"])
 model.eval()
 
+softmax = torch.nn.Softmax(dim=-1)
+
 print(f"{'-'*40}\n\n")
 for l in range(numberOfTokens):
     if source.size(-1) > (maxSequenceLength - 1):
@@ -68,13 +70,13 @@ for l in range(numberOfTokens):
         target = target[-1:]
 
     outputs = model(source.unsqueeze(0), target.unsqueeze(0)) # Encoder-Decoder
-    nextTokenProbs = outputs[-1].softmax(dim=-1)
+    nextTokenProbs = softmax(outputs[-1])
     #print("Actual Ouptuts:")
     #print(tokenizer.decode((torch.multinomial(outputs.softmax(dim=-1), num_samples=1)).reshape(-1).tolist()))
     #print()
     predictions = torch.multinomial(nextTokenProbs,
                                     num_samples=1).to("cpu")
-    predictions = torch.argmax(nextTokenProbs).to("cpu").unsqueeze(0)
+    #predictions = torch.argmax(nextTokenProbs).to("cpu").unsqueeze(0)
 
     source = torch.cat((source, predictions))
     target = torch.cat((target, predictions))

@@ -20,16 +20,16 @@ class ScriptWriter(nn.Module):
                                                  d_model=self.contextLength,
                                                  num_encoder_layers=self.depth,
                                                  num_decoder_layers=self.depth)
-        # self.encoderLayer = nn.TransformerEncoderLayer(d_model=self.contextLength,
-        #                                                 nhead=self.numberOfHeads,
-        #                                                batch_first=True,
-        #                                                dropout=self.dropout)
+        self.encoderLayer = nn.TransformerEncoderLayer(d_model=self.contextLength,
+                                                        nhead=self.numberOfHeads,
+                                                        batch_first=True,
+                                                        dropout=self.dropout)
         # self.decoderLayer = nn.TransformerDecoderLayer(d_model=self.contextLength,
         #                                                 nhead=self.numberOfHeads,
         #                                                batch_first=True,
         #                                                dropout=self.dropout)
-        # self.encoderNetwork = nn.TransformerEncoder(encoder_layer=self.encoderLayer,
-        #                                             num_layers=self.depth)
+        self.encoderNetwork = nn.TransformerEncoder(encoder_layer=self.encoderLayer,
+                                                    num_layers=self.depth)
         # self.decoderNetwork = nn.TransformerDecoder(decoder_layer=self.decoderLayer,
         #                                             num_layers=self.depth)
 
@@ -52,14 +52,17 @@ class ScriptWriter(nn.Module):
         sourceMask = nn.Transformer.generate_square_subsequent_mask(
                      source.size(1), device=source.device)
         sourceMask[sourceMask.isnan() == True] = 0.0
-        outputs = self.transformerNetwork(src=source, tgt=target, src_mask=sourceMask)
-        # outputs = self.encoderNetwork(src=source)
+        #outputs = self.transformerNetwork(src=source, tgt=target, src_mask=sourceMask)
+        outputs = self.encoderNetwork(src=source, mask=sourceMask)
         # outputs = self.decoderNetwork(tgt=source, memory=target)
         # outputs = self.layerNorm(outputs)
         outputs = self.predictionLayer(outputs) # B, T, VocabSize
         outputs = outputs.view(-1, outputs.size(-1)) # B * T, VocabSize
         if self.generate:
-            return outputs
+           #outputs = self.transformerNetwork.encoder(source) # Encoder network 
+           #outputs = self.predictionLayer(outputs) # B, T, VocabSize
+           #outputs = outputs.view(-1, outputs.size(-1)) # B * T, VocabSize
+           return outputs
 
         loss = self.criterion(outputs, decoderInputs.long().reshape(-1))
         return outputs, loss
