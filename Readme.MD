@@ -7,7 +7,8 @@ this [website](https://transcripts.foreverdreaming.org/).
 This work is intended for learning purposes.
 
 The current Transformer model is trained with a vocabulary size of 30,000 
-tokens and maximum sequence length of 500 tokens. It can run on Cloud TPUs as well as Apple Silicon processors.
+tokens and maximum sequence length of 100 tokens. It can run on Cloud TPUs 
+as well as Apple Silicon processors.
 
 ##### Code to train the model
 `python ModelTraining.py`
@@ -19,7 +20,6 @@ Make sure you train your own tokenizer or use pretrained tokenizers.
 
 Model Outputs:
 
-`
 * who is chandler? 
 * carol : horrible man! 
 * rachel : he can ’ t miss her. 
@@ -31,7 +31,8 @@ Model Outputs:
 * phoebe : yeah! rachel : okay, well, let ’ s`
 
 `
-* sheldon cooper : please. 
+* sheldon cooper 
+* : please. 
 * leonard : okay. 
 * cooper : as i got this tip, i ’ ve changed my mind. 
 * sheldon : okay, did i ever imagine by the math of an apology? 
@@ -39,4 +40,3 @@ Model Outputs:
 * howard : oh, look, look, we can teach them how things are usually learn to take them out. our heads in time pockets. 
 * sheldon : what do you mean? 
 * kripke : my brain was
-* `
