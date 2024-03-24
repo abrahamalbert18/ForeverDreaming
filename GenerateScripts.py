@@ -5,7 +5,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--modelName",
-                    default=f"Encoder-->ScriptWriter-->v2.pth.tar")
+                    default=f"Encoder-->ScriptWriter-->v6-->NoClipping.pth.tar")
 parser.add_argument("-nv", "--cuda", default=False, type=bool)
 parser.add_argument("-t", "--tokens", default=500, type=int)
 parser.add_argument("-w", "--word", default="", type=str)
@@ -21,13 +21,6 @@ firstWord = args.word
 vocabSize = args.vocabSize
 contextLength = args.contextLength
 depth = args.depth
-
-tokenizer = Tokenizer.from_file(path="Tokenizer/ForeverDreaming/Vocab.json")
-sentence = f"{firstWord} "
-tokenizedSentence = tokenizer.encode(sequence=sentence)
-tokenizedTarget = tokenizedSentence.ids[1:]
-source = torch.tensor(tokenizedSentence.ids[:-1])
-target = torch.tensor(tokenizedTarget[:])
 
 if not cuda:
    checkpoint = torch.load(f"SavedModels/{modelName}", map_location="mps")
@@ -65,31 +58,42 @@ print(f"{'-'*40}\n\n")
 # newTarget = torch.zeros(numberOfTokens // 100, maxSequenceLength - 1)
 memory = None
 
-for l in range(numberOfTokens):
-    if source.size(-1) > (maxSequenceLength - 1):
-        if l < 100:
-            words = tokenizer.decode(target[:-1].short().tolist())
-            memory = 1
-        else:
-            memory = 20
-            words = tokenizer.decode(target[memory:-1].short().tolist())
+tokenizer = Tokenizer.from_file(path="Tokenizer/ForeverDreaming/Vocab.json")
+sentence = f"{firstWord} "
+def tokenizeSourceAndTarget(sentence):
+    tokenizedSentence = tokenizer.encode(sequence=sentence)
+    tokenizedTarget = tokenizedSentence.ids[1:]
+    source = torch.tensor(tokenizedSentence.ids[:-1])
+    target = torch.tensor(tokenizedTarget[:])
+    return source, target
 
-        print(words)
-        # predictedWords.append(words)
-        # predictedWords += words + " "
-        source = source[-1 * memory:]
-        target = target[-1 * memory:]
+def generateText(source, target, tokenizer=tokenizer, model=model):
+    for l in range(numberOfTokens):
+        if source.size(-1) > (maxSequenceLength - 1):
+            if l < maxSequenceLength:
+                words = tokenizer.decode(target[:-1].short().tolist())
+                memory = 1
+            else:
+                memory = 20
+                words = tokenizer.decode(target[memory:-1].short().tolist())
 
-    outputs = model(source.unsqueeze(0), target.unsqueeze(0)) # Encoder-Decoder
-    nextTokenProbs = softmax(outputs[-1])
-    predictions = torch.multinomial(nextTokenProbs,
-                                    num_samples=1).to("cpu")
-    #predictions = torch.argmax(nextTokenProbs).to("cpu").unsqueeze(0)
+            source = source[-1 * memory:]
+            target = target[-1 * memory:]
 
-    source = torch.cat((source, predictions))
-    target = torch.cat((target, predictions))
+        outputs = model(source.unsqueeze(0), target.unsqueeze(0)) # Encoder-Decoder
+        nextTokenProbs = softmax(outputs[-1])
+        predictions = torch.multinomial(nextTokenProbs,
+                                        num_samples=1).to("cpu")
+        source = torch.cat((source, predictions))
+        target = torch.cat((target, predictions))
 
-print(f"{'-'*40}")
+    # print(f"{'-'*40}")
+    return words
+
+if __name__ == '__main__':
+    source, target = tokenizeSourceAndTarget(sentence)
+    text = generateText(source, target, tokenizer, model)
+    print(text)
 
 def generate(source):
 

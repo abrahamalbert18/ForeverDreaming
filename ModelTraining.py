@@ -152,7 +152,7 @@ for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
                         # backpropgate the loss
                         loss.backward()
                         # Clipping the gradients
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                        # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                         # update the weights
                         optimizer.step()
 
