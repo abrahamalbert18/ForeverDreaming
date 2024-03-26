@@ -40,3 +40,9 @@ Model Outputs:
 * howard : oh, look, look, we can teach them how things are usually learn to take them out. our heads in time pockets. 
 * sheldon : what do you mean? 
 * kripke : my brain was
+
+
+Docker Commands:
+
+`docker build . -t scriptgeneration`
+`docker run -it -v pwd:/home/ForeverDreaming/ -p 8050:8050 scriptgeneration bash`

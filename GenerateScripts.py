@@ -2,6 +2,7 @@ import torch
 from tokenizers import Tokenizer
 from Models import ScriptWriter
 import argparse
+import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--modelName",
@@ -22,10 +23,14 @@ vocabSize = args.vocabSize
 contextLength = args.contextLength
 depth = args.depth
 
-if not cuda:
-   checkpoint = torch.load(f"SavedModels/{modelName}", map_location="mps")
-else:
-    checkpoint = torch.load(f"SavedModels/{modelName}", map_location="cuda")
+
+device = "mps"
+device = "cpu"
+if cuda:
+    device = "cuda:0"
+
+checkpoint = torch.load(f"SavedModels/{modelName}", map_location=device)
+
 
 modelConfig = checkpoint["modelConfig"]
 # Model Config
@@ -36,9 +41,6 @@ depth = modelConfig["depth"]
 # learningRate = 1e-3
 maxSequenceLength = modelConfig["maxSequenceLength"]
 
-device = "mps"
-if cuda:
-    device = "cuda:0"
 
 model = ScriptWriter(contextLength=contextLength,
                          numberOfHeads=numberOfHeads,
@@ -88,7 +90,24 @@ def generateText(source, target, tokenizer=tokenizer, model=model):
         target = torch.cat((target, predictions))
 
     # print(f"{'-'*40}")
-    return words
+    # Output Formatting
+    template = r"\w* :"
+    speakers = re.findall(template, words)
+    content = re.split(template, words)
+    formattedText = ""
+    for i in range(len(speakers)):
+        formattedText += (speakerFormatting(speakers[i]) +
+                          contentFormatting(content[i + 1]) + "\n")
+
+    print(words)
+    return formattedText
+
+def contentFormatting(content):
+    content = content.replace("i ", "I ").strip()
+    return content
+
+def speakerFormatting(speaker):
+    return speaker.capitalize() + " "
 
 if __name__ == '__main__':
     source, target = tokenizeSourceAndTarget(sentence)

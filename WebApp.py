@@ -8,16 +8,25 @@ app = Dash(name="Forever Dreaming")
 # App layout
 app.layout = html.Div(
         [
-                html.H1("Welcome to Forever Dreaming!"),
+                html.H1("Welcome to Forever Dreaming!",
+                        style={"position": "relative",
+                                "left": "30px",
+                               "color":"LightSeaGreen"}),
                 html.H2("Start a prompt here and our model will finish your "
                         "text."),
                 dcc.Textarea(id="TextArea", value="Ross:", maxLength=50,
-                             style={"width" : "50%", "height" : 100}),
+                             style={"width" : "50%", "height" : 100,
+                                    "font-family": "Helvetica",
+                                    "font-size": "16px"}),
                 html.Button('Generate',
                             id='GenerateButton', n_clicks=0),
                 html.H2("Model Output:\n"),
-                dcc.Textarea(id="OutputTextArea", value="Ross:",
-                             style={"width": "50%", "height": 300}),
+                dcc.Textarea(id="OutputTextArea", value="",
+                             style={"width": "50%", "height": 300,
+                                    "font-family": "Helvetica",
+                                    "font-size":   "16px",
+                                    # "background-color":"FloralWhite"
+                                    }),
         ]
 )
 
@@ -36,4 +45,4 @@ def updateTextArea(n_clicks, value):
         return generatedText
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(host="0.0.0.0", port=8050, debug=True)
