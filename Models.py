@@ -33,7 +33,10 @@ class ScriptWriter(nn.Module):
         # self.decoderNetwork = nn.TransformerDecoder(decoder_layer=self.decoderLayer,
         #                                             num_layers=self.depth)
 
-        self.criterion = nn.CrossEntropyLoss(ignore_index=3,
+        # self.criterion = nn.CrossEntropyLoss(ignore_index=3,
+        #                                          reduction="mean")
+        # For Masked Token Prediction
+        self.criterion = nn.CrossEntropyLoss(ignore_index=0,
                                                  reduction="mean")
 
         self.relu = nn.ReLU()
@@ -45,6 +48,12 @@ class ScriptWriter(nn.Module):
     def forward(self, encoderInputs, decoderInputs):
         #if not self.training:
         #    self.dropout = 0
+
+        # masking the ~15% of the input tokens
+        temp = torch.rand_like(encoderInputs.float())
+        mask = temp <= 0.15
+        encoderInputs = torch.masked_fill(encoderInputs, mask, 4)
+
         source = self.wordEmbedding(encoderInputs.long())
         source = self.positionEmbedding(source)
         target = self.wordEmbedding(decoderInputs.long())
@@ -53,7 +62,8 @@ class ScriptWriter(nn.Module):
                      source.size(1), device=source.device)
         sourceMask[sourceMask.isnan() == True] = 0.0
         #outputs = self.transformerNetwork(src=source, tgt=target, src_mask=sourceMask)
-        outputs = self.encoderNetwork(src=source, mask=sourceMask)
+        # outputs = self.encoderNetwork(src=source, mask=sourceMask)
+        outputs = self.encoderNetwork(src=source) # For Masked Token Prediction
         # outputs = self.decoderNetwork(tgt=source, memory=target)
         # outputs = self.layerNorm(outputs)
         outputs = self.predictionLayer(outputs) # B, T, VocabSize
@@ -64,6 +74,7 @@ class ScriptWriter(nn.Module):
            #outputs = outputs.view(-1, outputs.size(-1)) # B * T, VocabSize
            return outputs
 
+        decoderInputs = (decoderInputs * mask) # For Masked Token Prediction
         loss = self.criterion(outputs, decoderInputs.long().reshape(-1))
         return outputs, loss
 

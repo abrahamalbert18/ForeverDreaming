@@ -40,7 +40,9 @@ def extractBatch(dataset, batchSize, item, maxSequenceLength, phase):
     data = dataset[item]
     iterations = max(2, math.ceil(data.size(0) / batchSize))
     source = data[:, :maxSequenceLength - 1]  # Inputs
-    target = data[:, 1:]  # Labels
+    #target = data[:, 1:]  # Labels for Language Modelling
+    target = data.clone() # Labels for Masked Token Prediction
+
     for i in range(iterations-1):
         yield (source[i * batchSize: (i+1) * batchSize, :],
                target[i * batchSize: (i+1) * batchSize, :])
