@@ -39,9 +39,9 @@ def extractBatch(dataset, batchSize, item, maxSequenceLength, phase):
     """
     data = dataset[item]
     iterations = max(2, math.ceil(data.size(0) / batchSize))
-    source = data[:, :maxSequenceLength - 1]  # Inputs
+    source = data[:, :maxSequenceLength]  # Inputs for Masked Token Prediction
     #target = data[:, 1:]  # Labels for Language Modelling
-    target = data.clone() # Labels for Masked Token Prediction
+    target = data[:,:] # Labels for Masked Token Prediction
 
     for i in range(iterations-1):
         yield (source[i * batchSize: (i+1) * batchSize, :],
@@ -90,7 +90,7 @@ modelConfig = {"contextLength":     contextLength,
 
 
 
-modelName = f"Encoder-->ScriptWriter-->v1.pth.tar"
+modelName = f"Encoder-->ScriptWriter-->v6-->NoClipping.pth.tar"
 #modelName = "mini.pth.tar"
 # Load from checkpoint
 if os.path.exists(f"SavedModels/{modelName}"):
@@ -98,8 +98,8 @@ if os.path.exists(f"SavedModels/{modelName}"):
                             map_location=device)
     model.load_state_dict(checkpoint["modelStateDict"])
     bestEpochLoss = checkpoint["bestEpochLoss"]
-    learningRate = checkpoint["learningRate"]
-    optimizer.load_state_dict(checkpoint["optimizerStateDict"])
+    learningRate = checkpoint["initialLearningRate"]
+    #optimizer.load_state_dict(checkpoint["optimizerStateDict"])
     modelConfig = checkpoint["modelConfig"]
     print("Model and Optimizer loaded successfully")
     # del checkpoint
@@ -108,7 +108,7 @@ print(f"Previous model's best loss: {bestEpochLoss}")
 model = torch.nn.DataParallel(model, device_ids=[0,1])
 model.to(device)
 
-writer = SummaryWriter(f"runs/{modelName}")
+writer = SummaryWriter(f"runs/Masked-->{modelName}")
 
 # training and evaluation loop
 for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
@@ -183,7 +183,7 @@ for epoch in tqdm(range(numberOfEpochs), desc="Epoch progress:", leave=False):
                         "initialLearningRate":   learningRate,
                         "latestLearningRate":scheduler.get_last_lr(),
                         "modelConfig": modelConfig},
-                       f"SavedModels/{modelName}")
+                       f"SavedModels/Masked-->{modelName}")
             tqdm.write(f"Best loss: {round(bestEpochLoss, 4)} @ epoch "
                   f"#{bestEpoch + 1}")
             tqdm.write(f"Best model saved.")
